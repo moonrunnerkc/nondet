@@ -44,7 +44,7 @@ class CheckMultiRunTest {
   }
 
   @Test
-  void threeRunsOfADeterministicWorkloadReportNoDivergence() {
+  void threeRunsOfAnEntropyFreeWorkloadReportNoReadsObserved() {
     assumeTrue(agentJar().isPresent(), "agent jar not built; run mvn -pl agent package first");
 
     final Capture run = check(
@@ -53,7 +53,22 @@ class CheckMultiRunTest {
         "--runs", "3",
         "probe.DeterministicWorkload");
 
-    assertEquals(0, run.code(), "an entropy-free workload agrees across all runs");
+    assertEquals(0, run.code(), "a workload that reads nothing exits zero");
+    assertTrue(run.out().contains("no entropy reads were observed across 3 runs"), run.out());
+    assertTrue(run.out().contains("not a proof of determinism"), run.out());
+  }
+
+  @Test
+  void aWorkloadReadingAStablePropertyReportsNoDivergence() {
+    assumeTrue(agentJar().isPresent(), "agent jar not built; run mvn -pl agent package first");
+
+    final Capture run = check(
+        "--agent-jar", agentJar().get().toString(),
+        "--class-path", testClasses().toString(),
+        "--runs", "3",
+        "probe.StablePropertyWorkload");
+
+    assertEquals(0, run.code(), "a stable property read agrees across runs");
     assertTrue(run.out().contains("no divergence"), run.out());
   }
 
@@ -74,21 +89,17 @@ class CheckMultiRunTest {
   }
 
   @Test
-  void aChildThatHitsTheEventCapIsReportedAsTruncated() {
+  void maxEventsCapIsForwardedSoAChildIsReportedAsTruncated() {
     final Path examples = repoRoot().resolve("examples").resolve("target").resolve("classes");
     assumeTrue(agentJar().isPresent(), "agent jar not built; run mvn -pl agent package first");
     assumeTrue(Files.isDirectory(examples), "examples not built; run mvn -pl examples package first");
 
-    System.setProperty("nondet.max.events", "1");
-    final Capture run;
-    try {
-      run = check(
-          "--agent-jar", agentJar().get().toString(),
-          "--class-path", examples.toString(),
-          "io.github.moonrunnerkc.nondet.examples.FlakyRetry");
-    } finally {
-      System.clearProperty("nondet.max.events");
-    }
+    final Capture run = check(
+        "--agent-jar", agentJar().get().toString(),
+        "--class-path", examples.toString(),
+        "--max-events", "1",
+        "--runs", "3",
+        "io.github.moonrunnerkc.nondet.examples.FlakyRetry");
 
     assertTrue(run.out().contains("hit the event cap"), run.out());
     assertTrue(run.out().contains("limited to the recorded reads"), run.out());

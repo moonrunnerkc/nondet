@@ -43,6 +43,22 @@ class RecorderTest {
   }
 
   @Test
+  void threadCountReflectsHowManyThreadsRecorded() throws InterruptedException {
+    Recorder.record(Category.TIME, "from-main", "0");
+    final Thread worker = new Thread(() -> Recorder.record(Category.RANDOM, "from-worker", "1"));
+    worker.start();
+    worker.join();
+
+    assertEquals(2, Recorder.threadCount(),
+        "both the main thread and the worker produced events");
+  }
+
+  @Test
+  void threadCountIsZeroWhenNothingWasRecorded() {
+    assertEquals(0, Recorder.threadCount());
+  }
+
+  @Test
   void snapshotFromOneThreadSeesEventsRecordedOnAnother() throws InterruptedException {
     final Thread worker = new Thread(() -> {
       Recorder.record(Category.RANDOM, "from-worker-1", "x");

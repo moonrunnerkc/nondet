@@ -41,4 +41,16 @@ class WireFormatTest {
     assertTrue(WireFormat.isTruncationMarker(WireFormat.TRUNCATION_MARKER));
     assertFalse(WireFormat.isTruncationMarker("3|TIME|deadbeefdeadbeef|12345"));
   }
+
+  @Test
+  void threadCountMarkerRoundTrips() {
+    final String marker = WireFormat.formatThreadCount(4);
+    assertTrue(WireFormat.isThreadCountMarker(marker));
+    assertEquals(4, WireFormat.parseThreadCount(marker));
+  }
+
+  @Test
+  void aRecordIsNotMistakenForAThreadCountMarker() {
+    assertFalse(WireFormat.isThreadCountMarker("3|TIME|deadbeefdeadbeef|12345"));
+  }
 }

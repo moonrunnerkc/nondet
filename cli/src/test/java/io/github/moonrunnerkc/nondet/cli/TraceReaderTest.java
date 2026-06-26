@@ -54,6 +54,17 @@ class TraceReaderTest {
     final TraceReader.Trace result = TraceReader.read(trace);
     assertEquals(1, result.events().size());
     assertFalse(result.truncated());
+    assertEquals(0, result.threadCount(), "no marker means the thread count is unknown");
+  }
+
+  @Test
+  void readsTheThreadCountMarkerAsMetadataNotAnEvent(@TempDir Path dir) throws IOException {
+    final Path trace = dir.resolve("run.trace");
+    Files.writeString(trace, "0|TIME|id-a|100\n1|TIME|id-b|200\n#threads 3\n");
+
+    final TraceReader.Trace result = TraceReader.read(trace);
+    assertEquals(2, result.events().size(), "the marker is not an event");
+    assertEquals(3, result.threadCount());
   }
 
   @Test

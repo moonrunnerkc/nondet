@@ -7,14 +7,23 @@ import picocli.CommandLine.Command;
  * Top level command for the nondet tool.
  *
  * <p>With no subcommand it prints usage. The real work lives in {@code scan} and
- * {@code check}.
+ * {@code check}. The version comes from the jar manifest through
+ * {@link ManifestVersionProvider}, so it is never hardcoded.
  */
 @Command(
     name = "nondet",
     mixinStandardHelpOptions = true,
-    version = "nondet 0.1.0",
+    versionProvider = ManifestVersionProvider.class,
     subcommands = {ScanCommand.class, CheckCommand.class},
-    description = "Find the call site where a JVM program stops being reproducible.")
+    description = "Find the call site where a JVM program stops being reproducible.",
+    footerHeading = "%nExamples:%n",
+    footer = {
+      "  nondet scan examples/target/classes",
+      "  nondet check --class-path examples/target/classes \\",
+      "    io.github.moonrunnerkc.nondet.examples.FlakyRetry",
+      "",
+      "Exit codes: 0 no divergence (or no reads), 1 divergence, 2 usage error, 3 execution error."
+    })
 public final class NondetCli implements Runnable {
 
   /**

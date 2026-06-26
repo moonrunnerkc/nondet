@@ -13,9 +13,10 @@ import java.util.List;
  * spans lines. The writer and reader on either side of a trace share this class, so the
  * round trip is exact.
  *
- * <p>A trace may end with the {@value #TRUNCATION_MARKER} marker line when the run hit the
- * event cap. It begins with {@code #}, which no sequence number does, so a reader can tell
- * it apart from a record without ambiguity.
+ * <p>A trace may carry marker lines that are not records. The {@value #TRUNCATION_MARKER}
+ * marker says the run hit the event cap; a {@code #threads N} marker says how many threads
+ * produced events. Both begin with {@code #}, which no sequence number does, so a reader can
+ * tell a marker apart from a record without ambiguity.
  */
 public final class WireFormat {
 
@@ -26,6 +27,9 @@ public final class WireFormat {
 
   /** The trailing trace line that marks a run as truncated at the event cap. */
   public static final String TRUNCATION_MARKER = "#truncated";
+
+  /** Prefix of the marker line that carries the count of threads that produced events. */
+  public static final String THREAD_COUNT_PREFIX = "#threads ";
 
   private WireFormat() {
   }
@@ -38,6 +42,43 @@ public final class WireFormat {
    */
   public static boolean isTruncationMarker(String line) {
     return TRUNCATION_MARKER.equals(line);
+  }
+
+  /**
+   * Reports whether a line is the thread-count marker rather than a trace record.
+   *
+   * @param line a raw line from a trace file, never {@code null}
+   * @return {@code true} when the line begins with {@value #THREAD_COUNT_PREFIX}
+   */
+  public static boolean isThreadCountMarker(String line) {
+    return line.startsWith(THREAD_COUNT_PREFIX);
+  }
+
+  /**
+   * Encodes the count of threads that produced events as a marker line.
+   *
+   * @param threadCount the number of threads that recorded at least one event, zero or greater
+   * @return the marker line {@code #threads N}, without a trailing newline
+   */
+  public static String formatThreadCount(int threadCount) {
+    return THREAD_COUNT_PREFIX + threadCount;
+  }
+
+  /**
+   * Parses the thread count out of a {@code #threads N} marker line.
+   *
+   * @param line a marker line as produced by {@link #formatThreadCount}, never {@code null}
+   * @return the decoded thread count
+   * @throws IllegalArgumentException if the line is not a thread-count marker or the count
+   *     is not an integer
+   */
+  public static int parseThreadCount(String line) {
+    if (!isThreadCountMarker(line)) {
+      throw new IllegalArgumentException(
+          "expected a '" + THREAD_COUNT_PREFIX + "N' marker but found: " + line);
+    }
+    final String count = line.substring(THREAD_COUNT_PREFIX.length());
+    return (int) parseLong(count, "thread count", line);
   }
 
   /**

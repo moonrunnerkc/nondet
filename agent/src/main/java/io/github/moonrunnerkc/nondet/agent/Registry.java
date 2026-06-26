@@ -74,7 +74,8 @@ public final class Registry {
     }
     final String registryPath = System.getProperty(REGISTRY_PROPERTY, tracePath + ".registry");
     try {
-      TraceWriter.writeTrace(Path.of(tracePath), Recorder.snapshot(), Recorder.truncated());
+      TraceWriter.writeTrace(Path.of(tracePath), Recorder.snapshot(), Recorder.truncated(),
+          Recorder.threadCount());
       TraceWriter.writeRegistry(Path.of(registryPath), CALL_SITES.values());
     } catch (final IOException cause) {
       System.err.println("nondet agent: failed to write trace to " + tracePath

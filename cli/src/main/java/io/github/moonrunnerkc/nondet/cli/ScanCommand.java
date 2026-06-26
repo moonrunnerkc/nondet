@@ -21,7 +21,10 @@ import picocli.CommandLine.Parameters;
  */
 @Command(
     name = "scan",
-    description = "Statically list entropy call sites in compiled classes.")
+    mixinStandardHelpOptions = true,
+    description = "Statically list entropy call sites in compiled classes.",
+    footerHeading = "%nExample:%n",
+    footer = "  nondet scan examples/target/classes")
 public final class ScanCommand implements Callable<Integer> {
 
   @Parameters(

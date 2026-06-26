@@ -25,13 +25,34 @@ public final class DivergenceReport {
   private final Map<String, CallSite> callSites;
   private final List<String> additionalSiteIds;
   private final List<Integer> truncatedRuns;
+  private final int maxThreads;
 
   private DivergenceReport(Divergence divergence, Map<String, CallSite> callSites,
-      List<String> additionalSiteIds, List<Integer> truncatedRuns) {
+      List<String> additionalSiteIds, List<Integer> truncatedRuns, int maxThreads) {
     this.divergence = divergence;
     this.callSites = callSites;
     this.additionalSiteIds = additionalSiteIds;
     this.truncatedRuns = truncatedRuns;
+    this.maxThreads = maxThreads;
+  }
+
+  /**
+   * Renders the message for a check where no run read any entropy source.
+   *
+   * <p>This is deliberately distinct from a {@link Divergence.Kind#NONE} report. A NONE
+   * report means reads happened and every run agreed; this one means nothing in the catalog
+   * was read at all, so there was nothing to compare. Either way the check exits zero, but
+   * the wording keeps the user from reading silence as a determinism proof.
+   *
+   * @param runs the number of runs that recorded nothing, at least one
+   * @return the report text with a trailing newline
+   */
+  public static String noReadsObserved(int runs) {
+    return "nondet check: no entropy reads were observed across " + runs + " run"
+        + (runs == 1 ? "" : "s") + "\n\n"
+        + "this is not a proof of determinism; it means nothing in the catalog was read, so\n"
+        + "there was nothing to diff. A source reached through reflection, or one outside the\n"
+        + "six catalog sources, would not show up here.\n";
   }
 
   /**
@@ -42,7 +63,7 @@ public final class DivergenceReport {
    * @return a report ready to render
    */
   public static DivergenceReport of(Divergence divergence, Map<String, CallSite> callSites) {
-    return new DivergenceReport(divergence, callSites, List.of(), List.of());
+    return new DivergenceReport(divergence, callSites, List.of(), List.of(), 1);
   }
 
   /**
@@ -57,8 +78,25 @@ public final class DivergenceReport {
    */
   public static DivergenceReport ofRuns(Divergence divergence, Map<String, CallSite> callSites,
       List<String> additionalSiteIds, List<Integer> truncatedRuns) {
+    return ofRuns(divergence, callSites, additionalSiteIds, truncatedRuns, 1);
+  }
+
+  /**
+   * Builds a multi-run report that also notes when more than one thread produced events.
+   *
+   * @param divergence        the primary divergence, the earliest across run pairings, never {@code null}
+   * @param callSites         the call site registry, keyed by id, never {@code null}
+   * @param additionalSiteIds ids of call sites that differ in some pairing but are not the
+   *     primary site, rendered as a secondary list; empty for a single divergence
+   * @param truncatedRuns     the 1-based run numbers whose traces hit the event cap, empty when none
+   * @param maxThreads        the most threads any run recorded from; a value above one adds a
+   *     best-effort note that cross-thread ordering is approximate
+   * @return a report ready to render
+   */
+  public static DivergenceReport ofRuns(Divergence divergence, Map<String, CallSite> callSites,
+      List<String> additionalSiteIds, List<Integer> truncatedRuns, int maxThreads) {
     return new DivergenceReport(divergence, callSites, List.copyOf(additionalSiteIds),
-        List.copyOf(truncatedRuns));
+        List.copyOf(truncatedRuns), maxThreads);
   }
 
   /**
@@ -67,7 +105,7 @@ public final class DivergenceReport {
    * @return the report text, deterministic for a given divergence and registry
    */
   public String render() {
-    return base() + additionalSites() + truncationNote();
+    return base() + additionalSites() + truncationNote() + threadNote();
   }
 
   /**
@@ -139,6 +177,15 @@ public final class DivergenceReport {
     return "\nnote: " + (single ? "run " : "runs ") + runs + " hit the event cap; "
         + (single ? "its trace is" : "their traces are")
         + " a prefix, so the divergence search above was limited to the recorded reads\n";
+  }
+
+  private String threadNote() {
+    if (maxThreads <= 1) {
+      return "";
+    }
+    return "\nnote: " + maxThreads + " threads produced events; cross-thread read ordering is"
+        + " approximate,\nso the divergence above may reflect interleaving rather than a"
+        + " real difference\n";
   }
 
   private String location(Event event) {

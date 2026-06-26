@@ -85,6 +85,25 @@ public final class Recorder {
   }
 
   /**
+   * Returns the number of threads that recorded at least one event.
+   *
+   * <p>Each recording thread owns one buffer, so a buffer with any events stands for a
+   * thread that produced output. A count above one means the trace interleaves reads from
+   * several threads, whose ordering across threads is itself nondeterministic.
+   *
+   * @return the count of threads that produced at least one event, zero when nothing was read
+   */
+  public static int threadCount() {
+    int active = 0;
+    for (final List<Event> buffer : BUFFERS) {
+      if (!buffer.isEmpty()) {
+        active++;
+      }
+    }
+    return active;
+  }
+
+  /**
    * Returns every recorded event in global sequence order.
    *
    * @return a new list of all events seen so far, ordered by sequence number

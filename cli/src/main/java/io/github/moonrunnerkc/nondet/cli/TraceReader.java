@@ -17,8 +17,8 @@ import java.util.Map;
  *
  * <p>Both readers use the same {@link WireFormat} the agent writes with, so parsing is
  * the exact inverse of writing. Blank lines are skipped so a trailing newline does not
- * produce a phantom record, and the optional truncation marker is read as a flag rather
- * than an event.
+ * produce a phantom record, and the truncation and thread-count markers are read as
+ * metadata rather than events.
  */
 public final class TraceReader {
 
@@ -26,12 +26,14 @@ public final class TraceReader {
   }
 
   /**
-   * A trace's events together with whether the run hit the event cap.
+   * A trace's events together with the metadata markers the agent appended.
    *
-   * @param events    the events in the order they appear, never {@code null}
-   * @param truncated whether the run was truncated, so the events are a prefix of the run
+   * @param events      the events in the order they appear, never {@code null}
+   * @param truncated   whether the run was truncated, so the events are a prefix of the run
+   * @param threadCount the number of threads that produced events, or zero when the trace
+   *     carries no thread-count marker
    */
-  public record Trace(List<Event> events, boolean truncated) {
+  public record Trace(List<Event> events, boolean truncated, int threadCount) {
   }
 
   /**
@@ -57,17 +59,20 @@ public final class TraceReader {
   public static Trace read(Path path) throws IOException {
     final List<Event> events = new ArrayList<>();
     boolean truncated = false;
+    int threadCount = 0;
     for (final String line : Files.readAllLines(path, StandardCharsets.UTF_8)) {
       if (line.isBlank()) {
         continue;
       }
       if (WireFormat.isTruncationMarker(line)) {
         truncated = true;
-        continue;
+      } else if (WireFormat.isThreadCountMarker(line)) {
+        threadCount = WireFormat.parseThreadCount(line);
+      } else {
+        events.add(WireFormat.parseTrace(line));
       }
-      events.add(WireFormat.parseTrace(line));
     }
-    return new Trace(List.copyOf(events), truncated);
+    return new Trace(List.copyOf(events), truncated, threadCount);
   }
 
   /**

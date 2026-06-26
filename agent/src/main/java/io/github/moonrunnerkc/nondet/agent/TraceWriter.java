@@ -48,6 +48,23 @@ public final class TraceWriter {
    * @throws IOException if the file cannot be written
    */
   public static void writeTrace(Path path, List<Event> events, boolean truncated) throws IOException {
+    writeTrace(path, events, truncated, 0);
+  }
+
+  /**
+   * Writes events to a trace file with the truncation and thread-count markers.
+   *
+   * @param path        the destination file; parent directories must already exist
+   * @param events      the events to write, written in their given order
+   * @param truncated   whether the run hit the event cap, in which case a trailing
+   *     {@link WireFormat#TRUNCATION_MARKER} line is written
+   * @param threadCount the number of threads that produced events; written as a trailing
+   *     {@code #threads N} marker when greater than zero so a reader can flag a run whose
+   *     cross-thread ordering is only approximate
+   * @throws IOException if the file cannot be written
+   */
+  public static void writeTrace(Path path, List<Event> events, boolean truncated, int threadCount)
+      throws IOException {
     try (Writer out = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
       for (final Event event : events) {
         out.write(WireFormat.formatTrace(event));
@@ -55,6 +72,10 @@ public final class TraceWriter {
       }
       if (truncated) {
         out.write(WireFormat.TRUNCATION_MARKER);
+        out.write('\n');
+      }
+      if (threadCount > 0) {
+        out.write(WireFormat.formatThreadCount(threadCount));
         out.write('\n');
       }
     }

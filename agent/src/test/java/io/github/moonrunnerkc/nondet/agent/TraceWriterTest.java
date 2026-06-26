@@ -44,6 +44,15 @@ class TraceWriterTest {
   }
 
   @Test
+  void writesTheTruncationAndThreadCountMarkersAfterTheEvents(@TempDir Path dir) throws IOException {
+    final Path trace = dir.resolve("trace.txt");
+    TraceWriter.writeTrace(trace, List.of(new Event(0, Category.TIME, "id-a", "100")), true, 3);
+
+    final String text = Files.readString(trace, StandardCharsets.UTF_8);
+    assertEquals("0|TIME|id-a|100\n#truncated\n#threads 3\n", text);
+  }
+
+  @Test
   void registryWritesSortedByCallSiteId(@TempDir Path dir) throws IOException {
     final Path registry = dir.resolve("registry.txt");
     TraceWriter.writeRegistry(registry, List.of(

@@ -39,7 +39,8 @@ class RegistryTest {
 
     Registry.flush();
 
-    assertEquals("0|TIME|id-a|42\n", Files.readString(trace));
+    assertEquals("0|TIME|id-a|42\n#threads 1\n", Files.readString(trace),
+        "the flush records the one recording thread after the events");
     assertEquals("id-a|pkg/Demo|run|7|System.nanoTime\n", Files.readString(registry));
   }
 

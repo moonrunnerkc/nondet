@@ -91,6 +91,37 @@ class DivergenceReportTest {
   }
 
   @Test
+  void multiRunReportNotesApproximateOrderingWhenSeveralThreadsRecorded() {
+    final Event left = new Event(0, Category.TIME, "id-a", "100");
+    final Event right = new Event(0, Category.TIME, "id-a", "215");
+    final String text = DivergenceReport
+        .ofRuns(Divergence.mismatch(0, left, right), registry, List.of(), List.of(), 4)
+        .render();
+
+    assertTrue(text.contains("4 threads produced events"), text);
+    assertTrue(text.contains("cross-thread read ordering is approximate"), text);
+  }
+
+  @Test
+  void aSingleThreadedReportHasNoThreadNote() {
+    final Event left = new Event(0, Category.TIME, "id-a", "100");
+    final Event right = new Event(0, Category.TIME, "id-a", "215");
+    final String text = DivergenceReport
+        .ofRuns(Divergence.mismatch(0, left, right), registry, List.of(), List.of(), 1)
+        .render();
+
+    assertFalse(text.contains("threads produced events"), text);
+  }
+
+  @Test
+  void noReadsObservedIsDistinctFromAgreement() {
+    final String text = DivergenceReport.noReadsObserved(3);
+    assertTrue(text.contains("no entropy reads were observed across 3 runs"), text);
+    assertTrue(text.contains("not a proof of determinism"), text);
+    assertFalse(text.contains("no divergence"), "the no-reads message must not read as agreement");
+  }
+
+  @Test
   void multiRunReportWithNoExtrasMatchesThePlainReport() {
     final Event left = new Event(2, Category.TIME, "id-a", "100");
     final Event right = new Event(2, Category.TIME, "id-a", "215");

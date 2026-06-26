@@ -21,8 +21,16 @@ import org.objectweb.asm.ClassWriter;
  * construction, and handed down to every method visitor. A matched call site whose
  * derived Hook does not exist is left untouched, so an unsupported overload is a safe
  * no-op rather than a dangling call.
+ *
+ * <p>When {@value #DEBUG_PROPERTY} is set, a class that fails to transform is named on
+ * stderr before its original bytes are kept, so a silent pass-through can be traced back
+ * to the class that triggered it. The default stays quiet so an instrumented program's
+ * output is not polluted.
  */
 public final class EntropyTransformer implements ClassFileTransformer {
+
+  /** System property that turns on naming each class that failed to transform. */
+  public static final String DEBUG_PROPERTY = "nondet.debug";
 
   private final Catalog catalog;
   private final Set<String> hookSignatures;
@@ -60,6 +68,11 @@ public final class EntropyTransformer implements ClassFileTransformer {
       reader.accept(new EntropyClassVisitor(writer, catalog, hookSignatures), 0);
       return writer.toByteArray();
     } catch (final Throwable failure) {
+      if (Boolean.getBoolean(DEBUG_PROPERTY)) {
+        final String named = className == null ? "an unnamed class" : className.replace('/', '.');
+        System.err.println("nondet agent: kept original bytes for " + named
+            + " after a failed transform (" + failure + ")");
+      }
       return null;
     }
   }
