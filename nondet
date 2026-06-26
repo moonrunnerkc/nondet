@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#
+# nondet: thin launcher for the built CLI jar. It passes every argument straight
+# through, so `./nondet scan ...` and `./nondet check ...` behave exactly like
+# `java -jar cli/target/nondet-cli.jar ...`.
+#
+# Non-bash users can skip this script and run the portable form directly:
+#   java -jar cli/target/nondet-cli.jar <args>
+
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+jar="$here/cli/target/nondet-cli.jar"
+
+if [[ ! -f "$jar" ]]; then
+  echo "nondet: $jar not found; build first with: mvn -DskipTests package" >&2
+  exit 3
+fi
+
+exec java -jar "$jar" "$@"
