@@ -1,5 +1,6 @@
 package io.github.moonrunnerkc.nondet.cli;
 
+import io.github.moonrunnerkc.nondet.catalog.Bundle;
 import io.github.moonrunnerkc.nondet.catalog.CallSite;
 import io.github.moonrunnerkc.nondet.catalog.Outcome;
 import java.io.IOException;
@@ -90,6 +91,18 @@ public final class CheckCommand implements Callable<Integer> {
   private boolean showWorkload;
 
   @Option(
+      names = "--minimize",
+      description = "When the outcomes differ, find the minimal set of reads that cause the divergence "
+          + "and write a repro bundle.")
+  private boolean minimize;
+
+  @Option(
+      names = "--repro-out",
+      paramLabel = "BUNDLE",
+      description = "Where to write the repro bundle under --minimize. Default nondet-repro.bundle.")
+  private Path reproOut = Path.of("nondet-repro.bundle");
+
+  @Option(
       names = {"-v", "--debug"},
       description = "Print diagnostics to stderr and set nondet.debug on each child.")
   private boolean debug;
@@ -161,7 +174,7 @@ public final class CheckCommand implements Callable<Integer> {
       if (showWorkload) {
         printWorkloadOutput(outputs);
       }
-      return report(outputs);
+      return report(outputs, runner, workDir);
     } finally {
       if (keep) {
         System.err.println("nondet check: kept traces in " + workDir);
@@ -171,7 +184,8 @@ public final class CheckCommand implements Callable<Integer> {
     }
   }
 
-  private int report(List<RunResult> outputs) throws IOException {
+  private int report(List<RunResult> outputs, WorkloadRunner runner, Path workDir)
+      throws IOException {
     final List<OutcomeReport.RunOutcome> runOutcomes = new ArrayList<>();
     final List<Integer> truncatedRuns = new ArrayList<>();
     final Map<String, CallSite> registry = new LinkedHashMap<>();
@@ -198,7 +212,49 @@ public final class CheckCommand implements Callable<Integer> {
 
     final OutcomeReport report = OutcomeReport.of(runOutcomes, registry, truncatedRuns, maxThreads);
     report.printTo(System.out);
-    return report.outcomesDiverged() ? DIVERGED : AGREE;
+    if (!report.outcomesDiverged()) {
+      return AGREE;
+    }
+    if (minimize) {
+      try {
+        minimizeAndReport(runner, workDir, runOutcomes, registry);
+      } catch (final RuntimeException cause) {
+        System.err.println("nondet check: could not complete the causal search: "
+            + cause.getMessage());
+      }
+    }
+    return DIVERGED;
+  }
+
+  private void minimizeAndReport(WorkloadRunner runner, Path workDir,
+      List<OutcomeReport.RunOutcome> runOutcomes, Map<String, CallSite> registry)
+      throws IOException {
+    final OutcomeReport.RunOutcome baseline = runOutcomes.get(0);
+    final OutcomeReport.RunOutcome failing = firstDifferentOutcome(runOutcomes, baseline);
+    final Bundle passingBundle = Bundle.fromEvents(baseline.events());
+    final Bundle failingBundle = Bundle.fromEvents(failing.events());
+    final Bisect bisect = new Bisect(runner, workDir, passingBundle, failingBundle);
+    final Bisect.Result result = bisect.search(reproOut.toAbsolutePath());
+    System.out.print(CausalReport.render(result, registry, classpath, mainClass, workloadArgs));
+    if (!result.failingFingerprint().equals(failing.outcome().fingerprint())) {
+      System.out.println("\nnote: replaying the recorded reads did not reproduce the observed"
+          + " outcome exactly,\nso part of the cause is outside the recorded reads, likely a"
+          + " reflective read or thread ordering");
+    }
+    if (debug) {
+      System.err.println("nondet check: causal search ran " + result.replays() + " replays");
+    }
+  }
+
+  private static OutcomeReport.RunOutcome firstDifferentOutcome(
+      List<OutcomeReport.RunOutcome> runOutcomes, OutcomeReport.RunOutcome baseline) {
+    for (final OutcomeReport.RunOutcome candidate : runOutcomes) {
+      if (!candidate.outcome().agreesWith(baseline.outcome())) {
+        return candidate;
+      }
+    }
+    throw new IllegalStateException("outcomes diverged but no run differs from the baseline; "
+        + "this is a bug in the divergence check");
   }
 
   private void reportFailure(RunResult result) {
