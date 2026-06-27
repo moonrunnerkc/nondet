@@ -3,20 +3,16 @@ package io.github.moonrunnerkc.nondet.cli;
 import io.github.moonrunnerkc.nondet.catalog.CallSite;
 import io.github.moonrunnerkc.nondet.catalog.Outcome;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.stream.Stream;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -51,7 +47,6 @@ public final class CheckCommand implements Callable<Integer> {
   private static final int USAGE = 2;
   private static final int EXEC_ERROR = 3;
   private static final int MIN_RUNS = 2;
-  private static final Path AGENT_TARGET = Path.of("agent", "target");
 
   @Option(
       names = {"-a", "--agent", "--agent-jar"},
@@ -171,7 +166,7 @@ public final class CheckCommand implements Callable<Integer> {
       if (keep) {
         System.err.println("nondet check: kept traces in " + workDir);
       } else {
-        deleteRecursively(workDir);
+        WorkDirs.deleteRecursively(workDir);
       }
     }
   }
@@ -222,30 +217,7 @@ public final class CheckCommand implements Callable<Integer> {
   }
 
   private Path resolveAgentJar() {
-    if (agentJar != null) {
-      if (!Files.isRegularFile(agentJar)) {
-        System.err.println("nondet check: agent jar not found at " + agentJar
-            + "; build it with: mvn -pl agent package");
-        return null;
-      }
-      return agentJar;
-    }
-    final Optional<Path> located;
-    try {
-      located = AgentJarLocator.newestJar(AGENT_TARGET);
-    } catch (final IOException cause) {
-      System.err.println("nondet check: could not list " + AGENT_TARGET + ": " + cause.getMessage());
-      return null;
-    }
-    if (located.isEmpty()) {
-      System.err.println("nondet check: no agent jar under " + AGENT_TARGET
-          + "; build it with: mvn -pl agent package, or pass --agent-jar <path>");
-      return null;
-    }
-    if (debug) {
-      System.err.println("nondet check: resolved agent jar " + located.get());
-    }
-    return located.get();
+    return AgentJars.resolve(agentJar, debug, "check");
   }
 
   private void printWorkloadOutput(List<RunResult> outputs) {
@@ -292,18 +264,4 @@ public final class CheckCommand implements Callable<Integer> {
     }
   }
 
-  private static void deleteRecursively(Path dir) throws IOException {
-    if (!Files.exists(dir)) {
-      return;
-    }
-    try (Stream<Path> entries = Files.walk(dir)) {
-      entries.sorted(Comparator.reverseOrder()).forEach(path -> {
-        try {
-          Files.deleteIfExists(path);
-        } catch (final IOException cause) {
-          throw new UncheckedIOException("failed to delete temp file " + path, cause);
-        }
-      });
-    }
-  }
 }

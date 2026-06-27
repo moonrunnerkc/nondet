@@ -14,7 +14,7 @@ import picocli.CommandLine.Command;
     name = "nondet",
     mixinStandardHelpOptions = true,
     versionProvider = ManifestVersionProvider.class,
-    subcommands = {ScanCommand.class, CheckCommand.class},
+    subcommands = {ScanCommand.class, CheckCommand.class, ReplayCommand.class},
     description = "Find the call site where a JVM program stops being reproducible.",
     footerHeading = "%nExamples:%n",
     footer = {
@@ -22,7 +22,7 @@ import picocli.CommandLine.Command;
       "  nondet check --class-path examples/target/classes \\",
       "    io.github.moonrunnerkc.nondet.examples.FlakyRetry",
       "",
-      "Exit codes: 0 no divergence (or no reads), 1 divergence, 2 usage error, 3 execution error."
+      "Exit codes: 0 outcomes agree (or no reads), 1 outcomes differ, 2 usage error, 3 execution error."
     })
 public final class NondetCli implements Runnable {
 

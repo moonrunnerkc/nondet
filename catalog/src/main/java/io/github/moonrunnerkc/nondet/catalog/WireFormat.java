@@ -24,6 +24,7 @@ public final class WireFormat {
   private static final char ESCAPE = '\\';
   private static final int TRACE_FIELDS = 4;
   private static final int REGISTRY_FIELDS = 5;
+  private static final int BUNDLE_FIELDS = 5;
 
   /** The trailing trace line that marks a run as truncated at the event cap. */
   public static final String TRUNCATION_MARKER = "#truncated";
@@ -143,6 +144,40 @@ public final class WireFormat {
     }
     final int sourceLine = (int) parseLong(fields.get(3), "line", line);
     return new CallSite(fields.get(0), fields.get(1), fields.get(2), sourceLine, fields.get(4));
+  }
+
+  /**
+   * Encodes a bundle entry as a single line, without the trailing newline.
+   *
+   * @param entry the bundle entry to encode, never {@code null}
+   * @return the encoded line {@code globalSeq|callSiteId|perSiteSeq|category|value}
+   */
+  public static String formatBundle(BundleEntry entry) {
+    return entry.globalSeq()
+        + String.valueOf(FIELD_SEPARATOR) + encode(entry.callSiteId())
+        + FIELD_SEPARATOR + entry.perSiteSeq()
+        + FIELD_SEPARATOR + entry.category().name()
+        + FIELD_SEPARATOR + encode(entry.value());
+  }
+
+  /**
+   * Parses one bundle line back into an entry.
+   *
+   * @param line a bundle line as produced by {@link #formatBundle}, without a trailing newline
+   * @return the decoded bundle entry
+   * @throws IllegalArgumentException if the line does not have five fields or a numeric field or
+   *     the category cannot be parsed
+   */
+  public static BundleEntry parseBundle(String line) {
+    final List<String> fields = split(line);
+    if (fields.size() != BUNDLE_FIELDS) {
+      throw new IllegalArgumentException(
+          "bundle line must have " + BUNDLE_FIELDS + " fields but had " + fields.size() + ": " + line);
+    }
+    final long globalSeq = parseLong(fields.get(0), "globalSeq", line);
+    final int perSiteSeq = (int) parseLong(fields.get(2), "perSiteSeq", line);
+    final Category category = parseCategory(fields.get(3), line);
+    return new BundleEntry(globalSeq, fields.get(1), perSiteSeq, category, fields.get(4));
   }
 
   private static String encode(String field) {

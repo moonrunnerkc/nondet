@@ -11,6 +11,10 @@ import java.lang.instrument.Instrumentation;
  * {@code -javaagent:nondet-agent.jar} and point the output at a file with
  * {@code -Dnondet.trace.out=<path>}. The agent never throws back into the launching JVM;
  * a failed transform is dropped so the target program runs unchanged.
+ *
+ * <p>When {@code -Dnondet.mode=replay} is set with a bundle named by
+ * {@code -Dnondet.replay.in=<path>}, the agent loads that bundle first, so every rewritten call
+ * site serves its recorded value instead of the live JDK one.
  */
 public final class Agent {
 
@@ -24,6 +28,7 @@ public final class Agent {
    * @param instrumentation the instrumentation handle supplied by the JVM, never {@code null}
    */
   public static void premain(String agentArgs, Instrumentation instrumentation) {
+    Replay.activateFromProperties();
     Registry.installShutdownHook();
     instrumentation.addTransformer(new EntropyTransformer(Catalog.ofDefault()), true);
   }
