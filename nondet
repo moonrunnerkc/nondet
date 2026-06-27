@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # nondet: thin launcher for the built CLI jar. It passes every argument straight
-# through, so `./nondet scan ...` and `./nondet check ...` behave exactly like
-# `java -jar cli/target/nondet-cli.jar ...`.
+# through, so `./nondet scan ...`, `./nondet check ...`, and `./nondet replay ...`
+# behave exactly like `java -jar cli/target/nondet-cli.jar ...`.
 #
 # Non-bash users can skip this script and run the portable form directly:
 #   java -jar cli/target/nondet-cli.jar <args>
