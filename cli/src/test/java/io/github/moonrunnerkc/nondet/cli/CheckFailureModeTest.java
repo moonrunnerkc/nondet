@@ -49,16 +49,28 @@ class CheckFailureModeTest {
   }
 
   @Test
-  void aFailingWorkloadIsReportedWithItsExitCode() {
+  void aWorkloadThatAlwaysFailsTheSameWayIsOutcomeStable() {
     assumeTrue(agentJar().isPresent(), "agent jar not built; run mvn -pl agent package first");
     final Capture run = check(
         "--agent-jar", agentJar().get().toString(),
         "--class-path", testClasses().toString(),
         "probe.FailingWorkload");
 
+    assertEquals(0, run.code(), run.out());
+    assertTrue(run.out().contains("no entropy reads were observed"), run.out());
+    assertTrue(run.out().contains("exited with code 1"), run.out());
+  }
+
+  @Test
+  void aHaltedChildLeavesNoTraceAndIsAnExecutionError() {
+    assumeTrue(agentJar().isPresent(), "agent jar not built; run mvn -pl agent package first");
+    final Capture run = check(
+        "--agent-jar", agentJar().get().toString(),
+        "--class-path", testClasses().toString(),
+        "probe.HaltingWorkload");
+
     assertEquals(3, run.code());
-    assertTrue(run.err().contains("exited with code"), run.err());
-    assertTrue(run.err().contains("IllegalStateException"), "the captured child output is shown: " + run.err());
+    assertTrue(run.err().contains("produced no trace"), run.err());
   }
 
   @Test

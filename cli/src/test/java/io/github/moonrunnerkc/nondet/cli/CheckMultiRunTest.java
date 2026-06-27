@@ -27,7 +27,7 @@ import picocli.CommandLine;
 class CheckMultiRunTest {
 
   @Test
-  void threeRunsOfFlakyRetryStillFindTheNanoTimeDivergence() {
+  void threeRunsOfFlakyRetryAreOutcomeStable() {
     final Path examples = repoRoot().resolve("examples").resolve("target").resolve("classes");
     assumeTrue(agentJar().isPresent(), "agent jar not built; run mvn -pl agent package first");
     assumeTrue(Files.isDirectory(examples), "examples not built; run mvn -pl examples package first");
@@ -38,9 +38,8 @@ class CheckMultiRunTest {
         "--runs", "3",
         "io.github.moonrunnerkc.nondet.examples.FlakyRetry");
 
-    assertEquals(1, run.code(), "three runs of FlakyRetry must still diverge");
-    assertTrue(run.out().contains("System.nanoTime"), run.out());
-    assertTrue(run.out().contains("FlakyRetry"), run.out());
+    assertEquals(0, run.code(), "FlakyRetry always reaches the same result: " + run.out());
+    assertTrue(run.out().contains("no causal nondeterminism"), run.out());
   }
 
   @Test
@@ -69,7 +68,7 @@ class CheckMultiRunTest {
         "probe.StablePropertyWorkload");
 
     assertEquals(0, run.code(), "a stable property read agrees across runs");
-    assertTrue(run.out().contains("no divergence"), run.out());
+    assertTrue(run.out().contains("no causal nondeterminism"), run.out());
   }
 
   @Test

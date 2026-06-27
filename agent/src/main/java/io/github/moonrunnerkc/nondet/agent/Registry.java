@@ -2,6 +2,8 @@ package io.github.moonrunnerkc.nondet.agent;
 
 import io.github.moonrunnerkc.nondet.catalog.CallSite;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Map;
@@ -19,6 +21,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * the registry path is unset it defaults to the trace path with a {@code .registry}
  * suffix. If the trace path is unset the agent writes nothing and says so on stderr,
  * rather than failing the target.
+ *
+ * <p>The flush also closes the declared-result channel: a workload that set
+ * {@value #RESULT_VALUE_PROPERTY} has its value written to the file named by
+ * {@value #RESULT_FILE_PROPERTY}, so the checker can fold a published result into the run's outcome
+ * fingerprint. A workload that wrote that file itself keeps its own bytes.
  */
 public final class Registry {
 
@@ -27,6 +34,12 @@ public final class Registry {
 
   /** System property naming the call site registry output file. */
   public static final String REGISTRY_PROPERTY = "nondet.registry.out";
+
+  /** System property naming the file a workload may publish a declared result to. */
+  public static final String RESULT_FILE_PROPERTY = "nondet.result.out";
+
+  /** System property a workload may set to publish its declared result without touching a file. */
+  public static final String RESULT_VALUE_PROPERTY = "nondet.result";
 
   private static final Map<String, CallSite> CALL_SITES = new ConcurrentHashMap<>();
 
@@ -67,6 +80,7 @@ public final class Registry {
    * <p>Visible for testing so the flush can be driven without a real shutdown.
    */
   static void flush() {
+    exportDeclaredResult();
     final String tracePath = System.getProperty(TRACE_PROPERTY);
     if (tracePath == null || tracePath.isBlank()) {
       System.err.println("nondet agent: " + TRACE_PROPERTY + " is not set, not writing a trace");
@@ -79,6 +93,32 @@ public final class Registry {
       TraceWriter.writeRegistry(Path.of(registryPath), CALL_SITES.values());
     } catch (final IOException cause) {
       System.err.println("nondet agent: failed to write trace to " + tracePath
+          + "; check the path is writable: " + cause.getMessage());
+    }
+  }
+
+  /**
+   * Publishes a declared result set through the value property to the result file.
+   *
+   * <p>A workload may publish its result either by writing the result file named by
+   * {@value #RESULT_FILE_PROPERTY} itself or by setting {@value #RESULT_VALUE_PROPERTY} and letting
+   * the agent persist it at shutdown. When the workload wrote the file already, its bytes win and
+   * this leaves them alone, so the direct file channel is never clobbered by the property channel.
+   */
+  private static void exportDeclaredResult() {
+    final String file = System.getProperty(RESULT_FILE_PROPERTY);
+    final String value = System.getProperty(RESULT_VALUE_PROPERTY);
+    if (file == null || file.isBlank() || value == null) {
+      return;
+    }
+    final Path path = Path.of(file);
+    if (Files.exists(path)) {
+      return;
+    }
+    try {
+      Files.writeString(path, value, StandardCharsets.UTF_8);
+    } catch (final IOException cause) {
+      System.err.println("nondet agent: could not write the declared result to " + file
           + "; check the path is writable: " + cause.getMessage());
     }
   }

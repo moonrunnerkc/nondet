@@ -1,7 +1,7 @@
 package io.github.moonrunnerkc.nondet.cli;
 
 import io.github.moonrunnerkc.nondet.catalog.CallSite;
-import io.github.moonrunnerkc.nondet.catalog.Event;
+import io.github.moonrunnerkc.nondet.catalog.Outcome;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -22,20 +22,23 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 /**
- * The {@code nondet check} subcommand: run a workload N times and diff the entropy reads.
+ * The {@code nondet check} subcommand: run a workload N times and compare what it produced.
  *
- * <p>Each run is a fresh child JVM with the agent attached. Every run after the first is
- * diffed against the first and the earliest first-divergence is reported with its source
- * location. A run that fails, hangs past {@code --timeout}, or writes no trace is reported
+ * <p>Each run is a fresh child JVM with the agent attached. After the runs finish, the checker
+ * fingerprints what each one produced, its exit code, output, and any declared result, and groups
+ * the runs by that fingerprint. When every run produced the same outcome there is no causal
+ * nondeterminism to report, even when the clocks behind the runs differed. When the runs produced
+ * different outcomes the checker reports them and points at the entropy reads that differ between
+ * them. A run that hangs past {@code --timeout} or writes no trace is a harness failure, reported
  * with its captured output and the execution-error code, never a hang or a stack trace.
  *
- * <p>The exit code is zero when the runs agree or nothing was read, one when they diverge,
- * two on a usage error, and three on an execution or IO error.
+ * <p>The exit code is zero when the runs agree on outcome or read nothing, one when their outcomes
+ * differ, two on a usage error, and three on an execution or IO error.
  */
 @Command(
     name = "check",
     mixinStandardHelpOptions = true,
-    description = "Run a workload N times and report the first entropy read where the runs diverge.",
+    description = "Run a workload N times and report the entropy reads that change its outcome.",
     footerHeading = "%nExample:%n",
     footer = {
       "  nondet check --class-path examples/target/classes \\",
@@ -111,8 +114,8 @@ public final class CheckCommand implements Callable<Integer> {
   /**
    * Runs the workload N times and reports the first divergence.
    *
-   * @return {@link #AGREE} (0) when the runs agree or nothing was read, {@link #DIVERGED}
-   *     (1) when they differ, {@link #USAGE} (2) on a bad option value, or
+   * @return {@link #AGREE} (0) when the runs agree on outcome or nothing was read, {@link #DIVERGED}
+   *     (1) when their outcomes differ, {@link #USAGE} (2) on a bad option value, or
    *     {@link #EXEC_ERROR} (3) when a run cannot be completed or a trace cannot be read
    */
   @Override
@@ -174,14 +177,17 @@ public final class CheckCommand implements Callable<Integer> {
   }
 
   private int report(List<RunResult> outputs) throws IOException {
-    final List<List<Event>> runEvents = new ArrayList<>();
+    final List<OutcomeReport.RunOutcome> runOutcomes = new ArrayList<>();
     final List<Integer> truncatedRuns = new ArrayList<>();
     final Map<String, CallSite> registry = new LinkedHashMap<>();
     int maxThreads = 0;
     for (final RunResult output : outputs) {
       final TraceReader.Trace trace = TraceReader.read(output.trace());
       final Map<String, CallSite> runRegistry = TraceReader.readRegistry(output.registry());
-      runEvents.add(trace.events());
+      final Outcome outcome = OutcomeCapture.capture(output);
+      OutcomeCapture.write(output.outcome(), outcome);
+      runOutcomes.add(new OutcomeReport.RunOutcome(
+          output.index(), output.exitCode(), outcome, trace.events()));
       if (trace.truncated()) {
         truncatedRuns.add(output.index());
       }
@@ -190,30 +196,22 @@ public final class CheckCommand implements Callable<Integer> {
       if (debug) {
         System.err.println("nondet check: run " + output.index() + " recorded "
             + trace.events().size() + " events from " + trace.threadCount() + " thread(s) across "
-            + distinctClasses(runRegistry) + " instrumented class(es)");
+            + distinctClasses(runRegistry) + " instrumented class(es); outcome "
+            + outcome.fingerprint());
       }
     }
 
-    if (runEvents.stream().allMatch(List::isEmpty)) {
-      System.out.print(DivergenceReport.noReadsObserved(runs));
-      return AGREE;
-    }
-
-    final MultiRunDiff.Result result = MultiRunDiff.analyze(runEvents);
-    DivergenceReport.ofRuns(result.primary(), registry, result.additionalSiteIds(),
-        truncatedRuns, maxThreads).printTo(System.out);
-    return result.primary().isNone() ? AGREE : DIVERGED;
+    final OutcomeReport report = OutcomeReport.of(runOutcomes, registry, truncatedRuns, maxThreads);
+    report.printTo(System.out);
+    return report.outcomesDiverged() ? DIVERGED : AGREE;
   }
 
   private void reportFailure(RunResult result) {
-    final String block = childOutputBlock(result.captured());
+    final String block = childOutputBlock(result);
     switch (result.status()) {
       case TIMED_OUT -> System.err.println("nondet check: run " + result.index()
           + " did not finish within " + timeoutSeconds + "s and was killed; raise --timeout or "
           + "make the workload terminate" + block);
-      case FAILED_EXIT -> System.err.println("nondet check: workload run " + result.index()
-          + " exited with code " + result.exitCode() + "; fix the workload so it runs cleanly "
-          + "under the agent before checking it" + block);
       case NO_TRACE -> System.err.println("nondet check: run " + result.index()
           + " produced no trace at " + result.trace() + "; confirm the agent attached and that "
           + "nondet.trace.out is writable" + block);
@@ -253,7 +251,7 @@ public final class CheckCommand implements Callable<Integer> {
   private void printWorkloadOutput(List<RunResult> outputs) {
     for (final RunResult output : outputs) {
       System.out.println("=== workload output, run " + output.index() + " ===");
-      System.out.print(readCaptured(output.captured()));
+      System.out.print(capturedStreams(output));
     }
   }
 
@@ -265,12 +263,25 @@ public final class CheckCommand implements Callable<Integer> {
     return classes.size();
   }
 
-  private static String childOutputBlock(Path captured) {
-    final String output = readCaptured(captured);
+  private static String childOutputBlock(RunResult result) {
+    final String output = capturedStreams(result);
     if (output.isBlank()) {
       return ". The run produced no output.";
     }
     return ". Captured child output:\n" + output;
+  }
+
+  private static String capturedStreams(RunResult result) {
+    final String out = readCaptured(result.stdout());
+    final String err = readCaptured(result.stderr());
+    final StringBuilder combined = new StringBuilder(out);
+    if (!err.isEmpty()) {
+      if (combined.length() > 0 && combined.charAt(combined.length() - 1) != '\n') {
+        combined.append('\n');
+      }
+      combined.append(err);
+    }
+    return combined.toString();
   }
 
   private static String readCaptured(Path captured) {

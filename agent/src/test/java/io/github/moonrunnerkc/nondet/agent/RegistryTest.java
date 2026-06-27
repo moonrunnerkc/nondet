@@ -26,6 +26,8 @@ class RegistryTest {
   void clearProperties() {
     System.clearProperty(Registry.TRACE_PROPERTY);
     System.clearProperty(Registry.REGISTRY_PROPERTY);
+    System.clearProperty(Registry.RESULT_FILE_PROPERTY);
+    System.clearProperty(Registry.RESULT_VALUE_PROPERTY);
   }
 
   @Test
@@ -63,5 +65,30 @@ class RegistryTest {
     Registry.flush();
 
     assertFalse(Files.exists(dir.resolve("run.trace")), "no trace path means no output file");
+  }
+
+  @Test
+  void flushExportsADeclaredResultPropertyToTheResultFile(@TempDir Path dir) throws IOException {
+    final Path result = dir.resolve("run.result");
+    System.setProperty(Registry.RESULT_FILE_PROPERTY, result.toString());
+    System.setProperty(Registry.RESULT_VALUE_PROPERTY, "published-value");
+
+    Registry.flush();
+
+    assertEquals("published-value", Files.readString(result),
+        "a result set through the value property is persisted to the result file");
+  }
+
+  @Test
+  void flushDoesNotClobberAResultFileTheWorkloadWroteItself(@TempDir Path dir) throws IOException {
+    final Path result = dir.resolve("run.result");
+    Files.writeString(result, "workload-wrote-this");
+    System.setProperty(Registry.RESULT_FILE_PROPERTY, result.toString());
+    System.setProperty(Registry.RESULT_VALUE_PROPERTY, "property-value");
+
+    Registry.flush();
+
+    assertEquals("workload-wrote-this", Files.readString(result),
+        "the direct file channel wins over the property channel");
   }
 }
