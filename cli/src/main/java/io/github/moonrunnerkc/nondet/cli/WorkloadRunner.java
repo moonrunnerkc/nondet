@@ -75,15 +75,11 @@ final class WorkloadRunner {
    * @throws InterruptedException if the wait for the child is interrupted
    */
   RunResult run(int index) throws IOException, InterruptedException {
-    return run(index, null);
+    return run(index, null, false);
   }
 
   /**
    * Runs the workload once in replay mode, serving recorded reads from a bundle.
-   *
-   * <p>Identical to {@link #run(int)} except the child is launched in replay mode against
-   * {@code bundle}, so each rewritten call site returns its recorded value instead of the live JDK
-   * one. The run is otherwise classified the same way.
    *
    * @param index  the 1-based run number, used to name this run's files
    * @param bundle the bundle to replay, or {@code null} to run live in record mode
@@ -92,13 +88,32 @@ final class WorkloadRunner {
    * @throws InterruptedException if the wait for the child is interrupted
    */
   RunResult run(int index, Path bundle) throws IOException, InterruptedException {
+    return run(index, bundle, false);
+  }
+
+  /**
+   * Runs the workload once in replay mode, optionally pinning threaded read order.
+   *
+   * <p>Identical to {@link #run(int)} except the child is launched in replay mode against
+   * {@code bundle}, so each rewritten call site returns its recorded value instead of the live JDK
+   * one. With {@code pin} set, the child also pins its reads to the recorded global order so a
+   * threaded run reproduces its interleaving. The run is otherwise classified the same way.
+   *
+   * @param index  the 1-based run number, used to name this run's files
+   * @param bundle the bundle to replay, or {@code null} to run live in record mode
+   * @param pin    whether to pin threaded read order to the recorded global sequence
+   * @return the outcome of the run
+   * @throws IOException          if the child process cannot be started
+   * @throws InterruptedException if the wait for the child is interrupted
+   */
+  RunResult run(int index, Path bundle, boolean pin) throws IOException, InterruptedException {
     final Path trace = workDir.resolve("run" + index + ".trace");
     final Path registry = workDir.resolve("run" + index + ".registry");
     final Path stdout = workDir.resolve("run" + index + ".out");
     final Path stderr = workDir.resolve("run" + index + ".err");
     final Path result = workDir.resolve("run" + index + ".result");
     final Path outcome = workDir.resolve("run" + index + ".outcome");
-    final List<String> command = command(trace, registry, result, bundle);
+    final List<String> command = command(trace, registry, result, bundle, pin);
     if (debug) {
       System.err.println("nondet check: run " + index + " command: " + String.join(" ", command));
     }
@@ -122,7 +137,7 @@ final class WorkloadRunner {
     return RunResult.success(index, trace, registry, stdout, stderr, result, outcome, code);
   }
 
-  private List<String> command(Path trace, Path registry, Path result, Path bundle) {
+  private List<String> command(Path trace, Path registry, Path result, Path bundle, boolean pin) {
     final List<String> command = new ArrayList<>();
     command.add(javaExecutable());
     command.add("-javaagent:" + agentJar);
@@ -132,6 +147,9 @@ final class WorkloadRunner {
     if (bundle != null) {
       command.add("-Dnondet.mode=replay");
       command.add("-Dnondet.replay.in=" + bundle);
+      if (pin) {
+        command.add("-Dnondet.replay.pin=true");
+      }
     }
     if (maxEvents > 0) {
       command.add("-D" + MAX_EVENTS_PROPERTY + "=" + maxEvents);

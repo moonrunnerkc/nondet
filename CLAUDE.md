@@ -96,12 +96,14 @@ not from load order or counters.
 - v0.2.0 lifts the v0.1.0 freeze on thread-scheduling attribution and
   JDK-internal patching, but only within a narrow boundary:
   - Reflection coverage is limited to rewriting call sites of
-    java.lang.reflect.Method.invoke and java.lang.invoke.MethodHandle invocation
-    in instrumented (non-skipped) classes, so a catalog target dispatched through
-    them routes through the same Recorder. The JDK reflection classes themselves
-    are still never instrumented or patched. When the true source line of a
-    reflective catalog call cannot be recovered, it is labelled reflective and
-    said so, never fabricated.
+    java.lang.reflect.Method.invoke in instrumented (non-skipped) classes, so a
+    catalog target dispatched through it routes through the same Recorder, with
+    the read attributed to the reflective caller and the api marked reflective.
+    The JDK reflection classes themselves are never instrumented or patched.
+    MethodHandle dispatch is out of scope for v0.2.0: its call sites are
+    signature-polymorphic and its target is not a recoverable Member, so it
+    cannot be rewritten cleanly; it stays a documented limit rather than a
+    half-working feature.
   - Thread coverage is limited to pinning the order of entropy reads under
     replay, by making each rewritten read wait its turn against the recorded
     global sequence. It pins ordering only at entropy-read points; it does not

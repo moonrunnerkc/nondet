@@ -92,13 +92,21 @@ class RewriteEdgeCaseTest {
   }
 
   @Test
-  void aReflectiveEntropyCallIsNotInstrumented() throws Exception {
+  void aReflectiveEntropyCallIsInstrumentedAndAttributedToItsCaller() throws Exception {
     final Class<?> loaded = Fixtures.transformAndLoad(PROBES);
 
     loaded.getMethod("reflectiveNanoTime").invoke(null);
 
-    assertTrue(Recorder.snapshot().isEmpty(),
-        "a System.nanoTime reached through Method.invoke is the known reflection blind spot");
+    final List<Event> events = Recorder.snapshot();
+    assertEquals(1, events.size(), "a System.nanoTime reached through Method.invoke is now recorded");
+    assertEquals(Category.TIME, events.get(0).category());
+    final CallSite site = Registry.callSites().stream()
+        .filter(registered -> registered.callSiteId().equals(events.get(0).callSiteId()))
+        .findFirst()
+        .orElseThrow();
+    assertEquals("System.nanoTime (reflective)", site.api(),
+        "the reflective read is attributed to its caller with the api marked reflective");
+    assertEquals("reflectiveNanoTime", site.method());
   }
 
   @Test

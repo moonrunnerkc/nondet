@@ -20,23 +20,27 @@ import org.objectweb.asm.Type;
  */
 final class HookMethods {
 
+  private static final String REFLECTIVE_DISPATCHER = "reflectInvoke";
+
   private HookMethods() {
   }
 
   /**
-   * Collects the {@code name + descriptor} key of every public static {@link Hook} method.
+   * Collects the {@code name + descriptor} key of every direct-call {@link Hook} method.
    *
    * <p>The descriptor is the JVM method descriptor, for example
    * {@code (Ljava/lang/String;)J}, so the key concatenates to {@code nanoTime(Ljava/lang/String;)J}.
    * A method name never contains {@code (} and a descriptor always starts with it, so the
-   * concatenation is unambiguous without a separator.
+   * concatenation is unambiguous without a separator. {@code reflectInvoke} is left out: it is the
+   * reflective dispatcher, not a direct-call overload, so the direct-call rewrite never targets it.
    *
    * @return an immutable set of supported Hook signature keys
    */
   static Set<String> signatures() {
     final Set<String> signatures = new HashSet<>();
     for (final Method method : Hook.class.getDeclaredMethods()) {
-      if (Modifier.isPublic(method.getModifiers()) && Modifier.isStatic(method.getModifiers())) {
+      if (Modifier.isPublic(method.getModifiers()) && Modifier.isStatic(method.getModifiers())
+          && !method.getName().equals(REFLECTIVE_DISPATCHER)) {
         signatures.add(method.getName() + Type.getMethodDescriptor(method));
       }
     }

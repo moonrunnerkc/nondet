@@ -73,6 +73,11 @@ public final class ReplayCommand implements Callable<Integer> {
   private String expect;
 
   @Option(
+      names = "--pin",
+      description = "Pin threaded read order to the recorded global sequence while replaying.")
+  private boolean pin;
+
+  @Option(
       names = "--keep-traces",
       paramLabel = "DIR",
       description = "Keep the replay's trace, registry, and outcome in DIR instead of deleting them.")
@@ -137,7 +142,7 @@ public final class ReplayCommand implements Callable<Integer> {
     try {
       final WorkloadRunner runner = new WorkloadRunner(agent, workDir, classpath, mainClass,
           workloadArgs, timeoutSeconds, 0, debug);
-      final RunResult result = runner.run(1, bundle);
+      final RunResult result = runner.run(1, bundle, pin);
       if (!result.ok()) {
         reportFailure(result);
         return EXEC_ERROR;

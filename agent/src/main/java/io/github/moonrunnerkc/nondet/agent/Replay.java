@@ -1,5 +1,6 @@
 package io.github.moonrunnerkc.nondet.agent;
 
+import io.github.moonrunnerkc.nondet.catalog.Bundle;
 import io.github.moonrunnerkc.nondet.catalog.BundleIO;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -12,6 +13,12 @@ import java.nio.file.Path;
  * every rewritten call site serves its recorded value through {@link #serve(String)}. With the
  * property unset the runtime records live reads as before, and {@code serve} returns {@code null} so
  * each Hook falls through to the real JDK api.
+ *
+ * <p>When {@value #PIN_PROPERTY} is set, replay serves through a {@link ThreadPin} that hands out the
+ * recorded values in their recorded global order, pinning a threaded run's interleaving. Without it,
+ * replay serves each site's values in order through a {@link ReplayTable} but lets the threads reach
+ * the reads in any order, which is the right default for a single-threaded run or a minimization
+ * trial whose control flow may differ from the recording.
  *
  * <p>Pure JDK so it resolves under any class loader. The loaded table is held in a volatile field so
  * the workload threads see it once the premain has installed it.
@@ -27,13 +34,17 @@ final class Replay {
   /** System property naming the bundle file to replay. */
   static final String BUNDLE_PROPERTY = "nondet.replay.in";
 
+  /** System property that pins threaded read order to the recorded global sequence under replay. */
+  static final String PIN_PROPERTY = "nondet.replay.pin";
+
   private static volatile ReplayTable table;
+  private static volatile ThreadPin pin;
 
   private Replay() {
   }
 
   /**
-   * Loads the replay table when the properties ask for replay mode.
+   * Loads the replay table or pin when the properties ask for replay mode.
    *
    * <p>A missing or unreadable bundle leaves the runtime in record mode and says so on stderr,
    * rather than failing the target program. Called once from the agent premain.
@@ -49,7 +60,12 @@ final class Replay {
       return;
     }
     try {
-      table = ReplayTable.fromBundle(BundleIO.read(Path.of(path)));
+      final Bundle bundle = BundleIO.read(Path.of(path));
+      if (Boolean.getBoolean(PIN_PROPERTY)) {
+        pin = ThreadPin.fromBundle(bundle);
+      } else {
+        table = ReplayTable.fromBundle(bundle);
+      }
     } catch (final IOException cause) {
       System.err.println("nondet agent: could not read the replay bundle at " + path
           + "; running live instead: " + cause.getMessage());
@@ -59,10 +75,10 @@ final class Replay {
   /**
    * Reports whether the runtime is serving recorded values.
    *
-   * @return {@code true} when a replay table is installed
+   * @return {@code true} when a replay table or pin is installed
    */
   static boolean active() {
-    return table != null;
+    return table != null || pin != null;
   }
 
   /**
@@ -73,6 +89,10 @@ final class Replay {
    *     exhausted
    */
   static String serve(String callSiteId) {
+    final ThreadPin pinned = pin;
+    if (pinned != null) {
+      return pinned.serve(callSiteId);
+    }
     final ReplayTable current = table;
     return current == null ? null : current.next(callSiteId);
   }
@@ -84,12 +104,24 @@ final class Replay {
    */
   static void install(ReplayTable replayTable) {
     table = replayTable;
+    pin = null;
   }
 
   /**
-   * Clears any installed replay table, returning to record mode. Visible for testing.
+   * Installs a thread pin directly. Visible for testing.
+   *
+   * @param threadPin the pin to serve from, or {@code null} to clear it
+   */
+  static void installPin(ThreadPin threadPin) {
+    pin = threadPin;
+    table = null;
+  }
+
+  /**
+   * Clears any installed replay table or pin, returning to record mode. Visible for testing.
    */
   static void reset() {
     table = null;
+    pin = null;
   }
 }

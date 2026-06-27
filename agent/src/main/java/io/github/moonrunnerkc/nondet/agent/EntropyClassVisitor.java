@@ -7,11 +7,13 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 /**
- * Wires each method through an {@link EntropyMethodVisitor} during transformation.
+ * Wires each method through the rewrite visitors during transformation.
  *
- * <p>This visitor only captures the class name and delegates to the class writer. The
- * decision to rewrite a call site lives in the method visitor, which also consults the
- * Hook signature set passed through here to skip overloads it cannot safely target.
+ * <p>This visitor only captures the class name and delegates to the class writer. Each method body
+ * is run through two visitors in a chain: the {@link EntropyMethodVisitor} rewrites direct catalog
+ * calls, and the {@link ReflectiveInvokeVisitor} behind it rewrites {@code Method.invoke} calls the
+ * direct rewrite passed through. They act on different instructions, so the order only decides which
+ * looks first; neither disturbs the other's work.
  */
 final class EntropyClassVisitor extends ClassVisitor {
 
@@ -36,6 +38,7 @@ final class EntropyClassVisitor extends ClassVisitor {
   public MethodVisitor visitMethod(int access, String name, String descriptor,
       String signature, String[] exceptions) {
     final MethodVisitor delegate = super.visitMethod(access, name, descriptor, signature, exceptions);
-    return new EntropyMethodVisitor(delegate, catalog, className, name, hookSignatures);
+    final MethodVisitor reflective = new ReflectiveInvokeVisitor(delegate, className, name);
+    return new EntropyMethodVisitor(reflective, catalog, className, name, hookSignatures);
   }
 }

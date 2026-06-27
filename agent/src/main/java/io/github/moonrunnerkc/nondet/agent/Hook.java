@@ -1,6 +1,12 @@
 package io.github.moonrunnerkc.nondet.agent;
 
+import io.github.moonrunnerkc.nondet.catalog.CallSite;
+import io.github.moonrunnerkc.nondet.catalog.CallSiteId;
 import io.github.moonrunnerkc.nondet.catalog.Category;
+import io.github.moonrunnerkc.nondet.catalog.EntropySource;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -16,7 +22,9 @@ import java.util.UUID;
  * <p>The call site id is the last parameter because the rewrite pushes it onto the stack after the
  * original arguments, just before the {@code invokestatic}. There is exactly one Hook method per
  * supported overload of a catalog source; the agent reflects over these methods at startup and only
- * rewrites a call site when a matching Hook exists.
+ * rewrites a call site when a matching Hook exists. {@link #reflectInvoke} is the one exception: it
+ * stands in for {@code Method.invoke} and resolves the catalog target at run time, since the static
+ * rewrite cannot see through reflection.
  *
  * <p>Pure JDK on purpose: the instrumented program may run these under any class loader, so they
  * depend only on the JDK and the catalog types bundled beside them.
@@ -153,6 +161,60 @@ public final class Hook {
     final String value = System.getProperty(key, fallback);
     Recorder.record(Category.SYSPROP, callSiteId, String.valueOf(value));
     return value;
+  }
+
+  /**
+   * Records, and under replay serves, a catalog source reached through {@code Method.invoke}.
+   *
+   * <p>The static rewrite cannot see which method a reflective call targets, so this resolves it at
+   * run time from the {@link Method} object. A reflective call to a non-catalog method is passed
+   * straight through. A reflective call to a catalog source is recorded and attributed to the
+   * reflective caller, with the api marked reflective, since the catalog read has no source line of
+   * its own in the caller's code. Under replay the recorded value is served as the method's return
+   * type instead of the live call.
+   *
+   * @param method       the method being invoked reflectively, never {@code null}
+   * @param receiver     the invocation receiver, {@code null} for a static method
+   * @param args         the invocation arguments, possibly {@code null}
+   * @param callerClass  the class doing the reflective call, in internal form
+   * @param callerMethod the method doing the reflective call
+   * @param line         the source line of the reflective call, or a negative value when unknown
+   * @return the value the reflective call returns, or the recorded value when replaying
+   * @throws InvocationTargetException if the underlying method throws
+   * @throws IllegalAccessException    if the method is inaccessible
+   */
+  public static Object reflectInvoke(Method method, Object receiver, Object[] args,
+      String callerClass, String callerMethod, int line)
+      throws InvocationTargetException, IllegalAccessException {
+    final Optional<EntropySource> match = ReflectiveCatalog.match(method);
+    if (match.isEmpty()) {
+      return method.invoke(receiver, args);
+    }
+    final EntropySource source = match.get();
+    final String callSiteId = CallSiteId.of(callerClass, callerMethod, line, source.api() + "@reflective");
+    Registry.register(new CallSite(callSiteId, callerClass, callerMethod, line,
+        source.api() + " (reflective)"));
+    final String served = Replay.serve(callSiteId);
+    if (served != null) {
+      Recorder.record(source.category(), callSiteId, served);
+      return decode(method.getReturnType(), served);
+    }
+    final Object value = method.invoke(receiver, args);
+    Recorder.record(source.category(), callSiteId, String.valueOf(value));
+    return value;
+  }
+
+  private static Object decode(Class<?> returnType, String served) {
+    if (returnType == long.class) {
+      return Long.parseLong(served);
+    }
+    if (returnType == double.class) {
+      return Double.parseDouble(served);
+    }
+    if (returnType == UUID.class) {
+      return UUID.fromString(served);
+    }
+    return decodeNull(served);
   }
 
   /**
