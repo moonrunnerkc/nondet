@@ -7,8 +7,9 @@ Rules for working in this repository. Follow all of them for every file.
 nondet is a JVM nondeterminism detector. It finds the exact call site where a
 program's execution stops being reproducible. Two modes share one entropy
 catalog: a static bytecode scanner (`nondet scan`) and a dynamic differential
-checker (`nondet check`) that runs a workload twice and reports the first read
-from an entropy source where the two runs disagree.
+checker (`nondet check`) that runs a workload several times and, when the runs
+produce different outcomes, names the minimal set of entropy reads that causes
+the difference and writes a deterministic repro that reproduces it on demand.
 
 Personal open source under github.com/moonrunnerkc. This is not an Aftermath
 Technologies product and must never be described as one.
@@ -87,11 +88,31 @@ not from load order or counters.
 
 ## Project guardrails
 
-- The v0.1.0 entropy catalog is frozen at six sources: System.nanoTime,
+- The entropy catalog is frozen at six sources: System.nanoTime,
   System.currentTimeMillis, Math.random, UUID.randomUUID, System.getenv,
-  System.getProperty. Do not expand it without approval. Catalog growth is the
-  main scope risk.
-- Do not add thread-scheduling attribution, JDK-internal patching, or dependency
-  scanning in v0.1.0. Those are later phases.
+  System.getProperty. This holds through v0.2.0. Do not expand it without
+  approval. Catalog growth is the main scope risk, and v0.2.0 buys its value
+  from causal logic, not from more sources.
+- v0.2.0 lifts the v0.1.0 freeze on thread-scheduling attribution and
+  JDK-internal patching, but only within a narrow boundary:
+  - Reflection coverage is limited to rewriting call sites of
+    java.lang.reflect.Method.invoke and java.lang.invoke.MethodHandle invocation
+    in instrumented (non-skipped) classes, so a catalog target dispatched through
+    them routes through the same Recorder. The JDK reflection classes themselves
+    are still never instrumented or patched. When the true source line of a
+    reflective catalog call cannot be recovered, it is labelled reflective and
+    said so, never fabricated.
+  - Thread coverage is limited to pinning the order of entropy reads under
+    replay, by making each rewritten read wait its turn against the recorded
+    global sequence. It pins ordering only at entropy-read points; it does not
+    patch the JVM scheduler, rewrite JDK concurrency classes, or claim exact
+    interleaving between reads. Where order still cannot be pinned, the existing
+    honest "approximate" note stays.
+  - Dependency scanning is still out of scope.
 - The two human-owned files are agent EntropyMethodVisitor (the call-site rewrite)
-  and cli Diff (first-divergence). Scaffold and contract them, never implement.
+  and cli Diff (first-divergence). Never implement or modify them. All new causal
+  logic lives in new types. A new component that needs first-divergence behavior
+  calls the existing Diff contract rather than rewriting it. If one of these files
+  must change, stop and leave a `// TODO(brad):` contract describing the change.
+- The only allowed runtime dependencies stay ASM and picocli, with JUnit 5 for
+  tests. Delta-debugging, bundle IO, and replay are written in house with the JDK.
