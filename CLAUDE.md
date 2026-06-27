@@ -14,7 +14,7 @@ the difference and writes a deterministic repro that reproduces it on demand.
 Personal open source under github.com/moonrunnerkc. This is not an Aftermath
 Technologies product and must never be described as one.
 
-Java 21. Maven multi-module reactor: catalog, scan, agent, cli, examples.
+Java 21. Maven multi-module reactor: catalog, scan, agent, cli, examples, evidence.
 
 ## Build and test
 

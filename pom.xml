@@ -26,6 +26,7 @@
     <module>agent</module>
     <module>cli</module>
     <module>examples</module>
+    <module>evidence</module>
   </modules>
 
   <properties>
