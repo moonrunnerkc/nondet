@@ -2,6 +2,7 @@ package io.github.moonrunnerkc.nondet.agent;
 
 import io.github.moonrunnerkc.nondet.catalog.Bundle;
 import io.github.moonrunnerkc.nondet.catalog.BundleIO;
+import io.github.moonrunnerkc.nondet.catalog.RuntimeKeys;
 import java.io.IOException;
 import java.nio.file.Path;
 
@@ -26,16 +27,16 @@ import java.nio.file.Path;
 final class Replay {
 
   /** System property selecting record or replay mode. */
-  static final String MODE_PROPERTY = "nondet.mode";
+  static final String MODE_PROPERTY = RuntimeKeys.MODE;
 
   /** The value of {@value #MODE_PROPERTY} that turns on replay. */
-  static final String REPLAY_MODE = "replay";
+  static final String REPLAY_MODE = RuntimeKeys.MODE_REPLAY;
 
   /** System property naming the bundle file to replay. */
-  static final String BUNDLE_PROPERTY = "nondet.replay.in";
+  static final String BUNDLE_PROPERTY = RuntimeKeys.REPLAY_IN;
 
   /** System property that pins threaded read order to the recorded global sequence under replay. */
-  static final String PIN_PROPERTY = "nondet.replay.pin";
+  static final String PIN_PROPERTY = RuntimeKeys.REPLAY_PIN;
 
   private static volatile ReplayTable table;
   private static volatile ThreadPin pin;

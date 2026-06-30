@@ -2,6 +2,7 @@ package io.github.moonrunnerkc.nondet.agent;
 
 import io.github.moonrunnerkc.nondet.catalog.Category;
 import io.github.moonrunnerkc.nondet.catalog.Event;
+import io.github.moonrunnerkc.nondet.catalog.RuntimeKeys;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
@@ -37,7 +38,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class Recorder {
 
   /** System property naming the per run cap on recorded events. */
-  public static final String MAX_EVENTS_PROPERTY = "nondet.max.events";
+  public static final String MAX_EVENTS_PROPERTY = RuntimeKeys.MAX_EVENTS;
 
   /** The default cap when {@value #MAX_EVENTS_PROPERTY} is unset or unparseable. */
   public static final long DEFAULT_MAX_EVENTS = 1_000_000L;

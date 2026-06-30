@@ -1,10 +1,8 @@
 package io.github.moonrunnerkc.nondet.cli;
 
-import io.github.moonrunnerkc.nondet.catalog.Bundle;
 import io.github.moonrunnerkc.nondet.catalog.CallSite;
 import io.github.moonrunnerkc.nondet.catalog.Outcome;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -217,7 +215,8 @@ public final class CheckCommand implements Callable<Integer> {
     }
     if (minimize) {
       try {
-        minimizeAndReport(runner, workDir, runOutcomes, registry);
+        new CausalSearch(reproOut, classpath, mainClass, workloadArgs, debug)
+            .run(runner, workDir, runOutcomes, registry);
       } catch (final RuntimeException cause) {
         System.err.println("nondet check: could not complete the causal search: "
             + cause.getMessage());
@@ -226,39 +225,8 @@ public final class CheckCommand implements Callable<Integer> {
     return DIVERGED;
   }
 
-  private void minimizeAndReport(WorkloadRunner runner, Path workDir,
-      List<OutcomeReport.RunOutcome> runOutcomes, Map<String, CallSite> registry)
-      throws IOException {
-    final OutcomeReport.RunOutcome baseline = runOutcomes.get(0);
-    final OutcomeReport.RunOutcome failing = firstDifferentOutcome(runOutcomes, baseline);
-    final Bundle passingBundle = Bundle.fromEvents(baseline.events());
-    final Bundle failingBundle = Bundle.fromEvents(failing.events());
-    final Bisect bisect = new Bisect(runner, workDir, passingBundle, failingBundle);
-    final Bisect.Result result = bisect.search(reproOut.toAbsolutePath());
-    System.out.print(CausalReport.render(result, registry, classpath, mainClass, workloadArgs));
-    if (!result.failingFingerprint().equals(failing.outcome().fingerprint())) {
-      System.out.println("\nnote: replaying the recorded reads did not reproduce the observed"
-          + " outcome exactly,\nso part of the cause is outside the recorded reads, likely a"
-          + " reflective read or thread ordering");
-    }
-    if (debug) {
-      System.err.println("nondet check: causal search ran " + result.replays() + " replays");
-    }
-  }
-
-  private static OutcomeReport.RunOutcome firstDifferentOutcome(
-      List<OutcomeReport.RunOutcome> runOutcomes, OutcomeReport.RunOutcome baseline) {
-    for (final OutcomeReport.RunOutcome candidate : runOutcomes) {
-      if (!candidate.outcome().agreesWith(baseline.outcome())) {
-        return candidate;
-      }
-    }
-    throw new IllegalStateException("outcomes diverged but no run differs from the baseline; "
-        + "this is a bug in the divergence check");
-  }
-
   private void reportFailure(RunResult result) {
-    final String block = childOutputBlock(result);
+    final String block = CapturedOutput.failureBlock(result);
     switch (result.status()) {
       case TIMED_OUT -> System.err.println("nondet check: run " + result.index()
           + " did not finish within " + timeoutSeconds + "s and was killed; raise --timeout or "
@@ -279,7 +247,7 @@ public final class CheckCommand implements Callable<Integer> {
   private void printWorkloadOutput(List<RunResult> outputs) {
     for (final RunResult output : outputs) {
       System.out.println("=== workload output, run " + output.index() + " ===");
-      System.out.print(capturedStreams(output));
+      System.out.print(CapturedOutput.streams(output));
     }
   }
 
@@ -290,34 +258,4 @@ public final class CheckCommand implements Callable<Integer> {
     }
     return classes.size();
   }
-
-  private static String childOutputBlock(RunResult result) {
-    final String output = capturedStreams(result);
-    if (output.isBlank()) {
-      return ". The run produced no output.";
-    }
-    return ". Captured child output:\n" + output;
-  }
-
-  private static String capturedStreams(RunResult result) {
-    final String out = readCaptured(result.stdout());
-    final String err = readCaptured(result.stderr());
-    final StringBuilder combined = new StringBuilder(out);
-    if (!err.isEmpty()) {
-      if (combined.length() > 0 && combined.charAt(combined.length() - 1) != '\n') {
-        combined.append('\n');
-      }
-      combined.append(err);
-    }
-    return combined.toString();
-  }
-
-  private static String readCaptured(Path captured) {
-    try {
-      return Files.exists(captured) ? Files.readString(captured, StandardCharsets.UTF_8) : "";
-    } catch (final IOException cause) {
-      return "(could not read captured output at " + captured + ": " + cause.getMessage() + ")";
-    }
-  }
-
 }

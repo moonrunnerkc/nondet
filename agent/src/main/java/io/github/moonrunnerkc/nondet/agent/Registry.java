@@ -1,6 +1,7 @@
 package io.github.moonrunnerkc.nondet.agent;
 
 import io.github.moonrunnerkc.nondet.catalog.CallSite;
+import io.github.moonrunnerkc.nondet.catalog.RuntimeKeys;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -30,16 +31,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class Registry {
 
   /** System property naming the trace output file. */
-  public static final String TRACE_PROPERTY = "nondet.trace.out";
+  public static final String TRACE_PROPERTY = RuntimeKeys.TRACE_OUT;
 
   /** System property naming the call site registry output file. */
-  public static final String REGISTRY_PROPERTY = "nondet.registry.out";
+  public static final String REGISTRY_PROPERTY = RuntimeKeys.REGISTRY_OUT;
 
   /** System property naming the file a workload may publish a declared result to. */
-  public static final String RESULT_FILE_PROPERTY = "nondet.result.out";
+  public static final String RESULT_FILE_PROPERTY = RuntimeKeys.RESULT_OUT;
 
   /** System property a workload may set to publish its declared result without touching a file. */
-  public static final String RESULT_VALUE_PROPERTY = "nondet.result";
+  public static final String RESULT_VALUE_PROPERTY = RuntimeKeys.RESULT_VALUE;
 
   private static final Map<String, CallSite> CALL_SITES = new ConcurrentHashMap<>();
 

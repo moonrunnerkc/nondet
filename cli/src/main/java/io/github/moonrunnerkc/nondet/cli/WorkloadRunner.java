@@ -1,5 +1,6 @@
 package io.github.moonrunnerkc.nondet.cli;
 
+import io.github.moonrunnerkc.nondet.catalog.RuntimeKeys;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,12 +24,6 @@ import java.util.concurrent.TimeUnit;
  * the outcome, so the caller can compare it like any other result.
  */
 final class WorkloadRunner {
-
-  private static final String TRACE_PROPERTY = "nondet.trace.out";
-  private static final String REGISTRY_PROPERTY = "nondet.registry.out";
-  private static final String RESULT_PROPERTY = "nondet.result.out";
-  private static final String MAX_EVENTS_PROPERTY = "nondet.max.events";
-  private static final String DEBUG_PROPERTY = "nondet.debug";
 
   private final Path agentJar;
   private final Path workDir;
@@ -141,21 +136,21 @@ final class WorkloadRunner {
     final List<String> command = new ArrayList<>();
     command.add(javaExecutable());
     command.add("-javaagent:" + agentJar);
-    command.add("-D" + TRACE_PROPERTY + "=" + trace);
-    command.add("-D" + REGISTRY_PROPERTY + "=" + registry);
-    command.add("-D" + RESULT_PROPERTY + "=" + result);
+    command.add("-D" + RuntimeKeys.TRACE_OUT + "=" + trace);
+    command.add("-D" + RuntimeKeys.REGISTRY_OUT + "=" + registry);
+    command.add("-D" + RuntimeKeys.RESULT_OUT + "=" + result);
     if (bundle != null) {
-      command.add("-Dnondet.mode=replay");
-      command.add("-Dnondet.replay.in=" + bundle);
+      command.add("-D" + RuntimeKeys.MODE + "=" + RuntimeKeys.MODE_REPLAY);
+      command.add("-D" + RuntimeKeys.REPLAY_IN + "=" + bundle);
       if (pin) {
-        command.add("-Dnondet.replay.pin=true");
+        command.add("-D" + RuntimeKeys.REPLAY_PIN + "=true");
       }
     }
     if (maxEvents > 0) {
-      command.add("-D" + MAX_EVENTS_PROPERTY + "=" + maxEvents);
+      command.add("-D" + RuntimeKeys.MAX_EVENTS + "=" + maxEvents);
     }
     if (debug) {
-      command.add("-D" + DEBUG_PROPERTY + "=true");
+      command.add("-D" + RuntimeKeys.DEBUG + "=true");
     }
     if (classpath != null && !classpath.isBlank()) {
       command.add("-cp");

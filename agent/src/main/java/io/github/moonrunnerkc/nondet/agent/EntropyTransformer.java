@@ -1,6 +1,7 @@
 package io.github.moonrunnerkc.nondet.agent;
 
 import io.github.moonrunnerkc.nondet.catalog.Catalog;
+import io.github.moonrunnerkc.nondet.catalog.RuntimeKeys;
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
 import java.util.Objects;
@@ -30,7 +31,7 @@ import org.objectweb.asm.ClassWriter;
 public final class EntropyTransformer implements ClassFileTransformer {
 
   /** System property that turns on naming each class that failed to transform. */
-  public static final String DEBUG_PROPERTY = "nondet.debug";
+  public static final String DEBUG_PROPERTY = RuntimeKeys.DEBUG;
 
   private final Catalog catalog;
   private final Set<String> hookSignatures;
